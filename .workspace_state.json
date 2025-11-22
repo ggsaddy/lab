@@ -1,0 +1,10 @@
+{
+  "active": "test.txt",
+  "files": [
+    {
+      "name": "test.txt",
+      "modified": false,
+      "logging_enabled": false
+    }
+  ]
+}

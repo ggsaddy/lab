@@ -1,111 +1,248 @@
-'''工作区模块实现'''
-from core.memento import WorkspaceMemento
-from core.observer import Subject
-from core.text_editor import TextEditor
-from utils import load_json, save_json
 import os
-'''工作区状态保存路径'''
-STATE_PATH = os.path.join("data", "workspace_state.json")
+import json
+from typing import Dict, Optional
+from .interfaces import Subject
+from .editor import TextEditor
+from .logger import Logger # 需要引入 Logger 类型做类型提示(可选)
+from pathlib import Path
 
 class Workspace(Subject):
     def __init__(self):
         super().__init__()
-        self.editors = {}  # 文件名到TextEditor对象的映射集合
-        self.active_file = None  # 当前活跃文件名
-        self.log_enabled = False  # 当前活跃文件是否开启日志功能 
-        self.modified_files = set()  # 记录已加载文件修改状态
+        self.editors: Dict[str, TextEditor] = {}
+        self.active_editor_name: Optional[str] = None
+        # Logger 会在 main 中 attach，但为了获取 logger 状态，我们最好能反向访问，
+        # 或者在 Subject 中保存 observers 列表。
+        # 在 interfaces.py 的 Subject 中，我们有 self._observers。
+        # 为了方便，我们假设第一个 observer 就是 Logger。
+    
+    # ... (active_editor, load_file, init_file, save_file, _write_to_disk 代码不变，请保留) ...
+    # 为了节省篇幅，这里只列出修改过或新增的方法，其余请保留原样
+    
+    @property
+    def active_editor(self) -> Optional[TextEditor]:
+        if self.active_editor_name and self.active_editor_name in self.editors:
+            return self.editors[self.active_editor_name]
+        return None
 
-    # 加载txt文件到工作区
-    def load_file(self, filepath: str):
-        editor = TextEditor(filepath)
-        filename = os.path.basename(filepath)
-        self.editors[filename] = editor
-        self.active_file = filename
-        self.notify_observers(f"load {filename}")
-
-    # 保存指定文件(未指定则保存当前活跃文件)
-    def save_file(self, filename: str = None):
-        filename = filename or self.active_file
+    def load_file(self, filename: str):
+        # (保持原样)
         if filename in self.editors:
-            editor = self.editors[filename]
-            editor.save()
-            self.modified_files.discard(filename)
-            self.notify_observers(f"save {filename}")
-        else:
-            if filename == "all":
-                for fname, editor in self.editors.items():
-                    editor.save()
-                    self.modified_files.discard(fname)
-                    self.notify_observers(f"save {fname}")
-            else:
-                print(f"文件 {filename} 未打开，无法保存")
-
-    def init_file(self, filename: str, with_logging: bool = False):
-        if filename in self.editors:
-            print(f"文件 {filename} 已存在，无法初始化")
+            self.switch_editor(filename)
             return
-        filepath = os.path.join("data", filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        if with_logging:
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(f"# log\n")
+        content = []
+        if os.path.exists(filename):
+            try:
+                with open(filename, 'r', encoding='utf-8') as f:
+                    content = [line.rstrip('\n') for line in f.readlines()]
+            except IOError as e:
+                print(f"Error loading file: {e}")
+                return
         else:
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write("")
-        editor = TextEditor(filepath)
+            if Path(filename).suffix != '.txt':
+                print(f"Warning: {filename} is not a .txt file.Please check the file format.")
+                return 
+
+            print(f"New file created: {filename}")
+            
+        editor = TextEditor(filename, content)
         self.editors[filename] = editor
-        self.active_file = filename
-        editor.modified = True
-        self.modified_files.add(filename)
-        self.notify_observers(f"init {filename}")
+        self.active_editor_name = filename
+        
+        if content and content[0].strip() == "# log":
+            self.notify("auto_log_enable", {"filename": filename})
 
-    # 关闭指定文件(未指定则关闭当前活跃文件)
+        self.notify("command", {"filename": filename, "command_str": f"load {filename}"})
+        print(f"Loaded {filename}")
+
+    def init_file(self, filename: str, with_log: bool = False):
+        # (保持原样)
+        if filename in self.editors:
+            print(f"Error: {filename} is already open.")
+            return
+        if Path(filename).suffix != '.txt':
+            print(f"Warning: {filename} is not a .txt file.Please check the file format.")
+            return
+        content = ["# log"] if with_log else []
+        editor = TextEditor(filename, content)
+        editor.is_modified = True 
+        self.editors[filename] = editor
+        self.active_editor_name = filename
+        if with_log:
+            self.notify("auto_log_enable", {"filename": filename})
+        self.notify("command", {"filename": filename, "command_str": f"init {filename}"})
+        print(f"Initialized {filename}")
+
+    def save_file(self, filename: str = None):
+        # (保持原样)
+        if filename == "all":
+            for name in self.editors:
+                self._write_to_disk(name)
+            return
+        target = filename if filename else self.active_editor_name
+        if not target or target not in self.editors:
+            print("Error: No file specified or file not open.")
+            return
+        self._write_to_disk(target)
+
+    def _write_to_disk(self, filename: str):
+        # (保持原样)
+        editor = self.editors[filename]
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(editor.get_content_str())
+            editor.is_modified = False
+            self.notify("command", {"filename": filename, "command_str": "save"})
+            print(f"Saved {filename}")
+        except IOError as e:
+            print(f"Error saving {filename}: {e}")
+
+    def switch_editor(self, filename: str):
+        # (保持原样)
+        if filename in self.editors:
+            self.active_editor_name = filename
+            print(f"Switched to {filename}")
+        else:
+            print(f"Error: File {filename} not open.")
+    
+    def list_editors(self):
+        # (保持原样)
+        if not self.editors:
+            print("No files open.")
+            return
+        for name, editor in self.editors.items():
+            prefix = ">" if name == self.active_editor_name else " "
+            status = "*" if editor.is_modified else ""
+            print(f"{prefix} {name}{status}")
+
+    # === 以下是重点修改的部分 ===
+
     def close_file(self, filename: str = None):
-        filename = filename or self.active_file
-        if filename in self.editors:
-            del self.editors[filename]
-            self.modified_files.discard(filename)
-            self.notify_observers(f"close {filename}")
-            if filename == self.active_file:
-                self.active_file = None
-        else:
-            print(f"文件 {filename} 未打开，无法关闭")
+        """
+        修复 Bug 2: 如果用户选择不保存，且文件在磁盘不存在(纯buffer)，则视为废弃
+        """
+        target = filename if filename else self.active_editor_name
+        if not target or target not in self.editors:
+            print("Error: File not open.")
+            return
 
-    def edit_file(self, filename: str):
-        if filename in self.editors:
-            self.active_file = filename
-            self.notify_observers(f"edit {filename}")
-        else:
-            print(f"文件 {filename} 未打开，无法编辑")
+        editor = self.editors[target]
+        
+        if editor.is_modified:
+            choice = input(f"File '{target}' has unsaved changes. Save? (y/n): ").strip().lower()
+            if choice == 'y':
+                self._write_to_disk(target)
+            else:
+                # 用户选择不保存
+                # Bug 2 修复逻辑: 如果是 init 产生的并且从未保存过（磁盘上无此文件）
+                if not os.path.exists(target):
+                    # 清理日志（需要通知 logger 或直接调用）
+                    # 这里我们通过 hack 方式获取 logger，或者发送特殊事件
+                    # 简单起见，假设第一个 observer 是 logger (在 main 中 attach 的)
+                    if self._observers:
+                        logger = self._observers[0] 
+                        if hasattr(logger, 'delete_log_file'):
+                            logger.delete_log_file(target)
+        
+        del self.editors[target]
+        self.notify("command", {"filename": target, "command_str": "close"})
+        print(f"Closed {target}")
 
-    # 创建工作区状态备忘录对象
-    def create_memento(self) -> WorkspaceMemento:
+        if self.active_editor_name == target:
+            self.active_editor_name = list(self.editors.keys())[-1] if self.editors else None
+            if self.active_editor_name:
+                print(f"Active file switched to {self.active_editor_name}")
+
+    def check_and_exit(self) -> bool:
+        open_files = list(self.editors.keys())
+        
+        for filename in open_files:
+            editor = self.editors[filename]
+            if editor.is_modified:
+                choice = input(f"File '{filename}' has unsaved changes. Save? (y/n): ").strip().lower()
+                if choice == 'y':
+                    self._write_to_disk(filename)
+                else:
+                    if not os.path.exists(filename):
+                        if self._observers:
+                            logger = self._observers[0]
+                            if hasattr(logger, 'delete_log_file'):
+                                logger.delete_log_file(filename)
+             
+                        del self.editors[filename] 
+                        
+                        if self.active_editor_name == filename:
+                            self.active_editor_name = None
+
+        self._save_state()
+        return True
+
+    def _save_state(self):
+        """
+        修复 Bug 3: 保存 modified 状态和日志开关状态
+        """
+        files_data = []
+        
+        # 获取日志开启状态
+        logged_files = []
+        if self._observers and hasattr(self._observers[0], 'get_enabled_files'):
+            logged_files = self._observers[0].get_enabled_files()
+
+        for name, editor in self.editors.items():
+            files_data.append({
+                "name": name,
+                "modified": editor.is_modified,
+                "logging_enabled": name in logged_files
+            })
+
         state = {
-            "open_files": list(self.editors.keys()),
-            "active_file": self.active_file,
-            "modified": list(self.modified_files),
-            "log_enabled": self.log_enabled
+            "active": self.active_editor_name,
+            "files": files_data
         }
-        return WorkspaceMemento(state)
+        
+        try:
+            with open(".workspace_state.json", 'w') as f:
+                json.dump(state, f, indent=2)
+        except IOError:
+            pass
 
-    # 从备忘录对象恢复工作区状态
-    def restore_from_memento(self, memento: WorkspaceMemento):
-        state = memento.get_state()
-        # 只恢复简单可序列化的状态（不恢复 undo/redo）
-        self.log_enabled = state.get("log_enabled", False)
-        self.modified_files = set(state.get("modified", []))
-        self.active_file = state.get("active_file", None)
-        # 延迟加载文件内容：这里我们选择重新 load 文件（恢复打开的文件列表）
-        for fname in state.get("open_files", []):
-            self.load_file(fname)
-
-    # 持久化工作区状态到文件
-    def persist_state(self):
-        memento = self.create_memento()
-        save_json(STATE_PATH, memento.get_state())
-
-    # 从文件加载工作区状态
-    def load_state(self):
-        raw = load_json(STATE_PATH)
-        if raw:
-            self.restore_from_memento(WorkspaceMemento(raw))
+    def _load_workspace_state(self):
+        """
+        修复 Bug 3: 恢复 modified 状态和日志开关状态
+        """
+        if not os.path.exists(".workspace_state.json"):
+            return
+        try:
+            with open(".workspace_state.json", 'r') as f:
+                state = json.load(f)
+                
+                file_list = state.get("files", [])
+                # 兼容旧版本配置（如果之前只是存了 list string）
+                if file_list and isinstance(file_list[0], str):
+                    # 旧版本逻辑
+                    for fname in file_list:
+                        self.load_file(fname)
+                else:
+                    # 新版本逻辑
+                    for file_data in file_list:
+                        fname = file_data["name"]
+                        is_modified = file_data["modified"]
+                        logging_enabled = file_data["logging_enabled"]
+                        
+                        self.load_file(fname)
+                        
+                        # 恢复修改状态
+                        if fname in self.editors:
+                            self.editors[fname].is_modified = is_modified
+                        
+                        # 恢复日志状态
+                        if logging_enabled:
+                            self.notify("log_on", {"filename": fname})
+                            
+                # 恢复活动文件
+                active = state.get("active")
+                if active in self.editors:
+                    self.active_editor_name = active
+                    
+        except (IOError, json.JSONDecodeError):
+            print("Warning: Failed to restore workspace state.")
