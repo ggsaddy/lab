@@ -19,7 +19,7 @@ class TextEditor:
         if command.execute():
             self._undo_stack.append(command)
             self._redo_stack.clear()  # 新操作会清空重做栈
-            self.is_modified = True
+            # self.is_modified = True
             return True
         return False
 
@@ -31,7 +31,7 @@ class TextEditor:
             self._redo_stack.append(cmd)
             # 注意：简单的 undo 后通常认为文件仍是被修改过的，
             # 除非我们实现更复杂的 hash 对比，这里暂定为 True
-            self.is_modified = True
+            # self.is_modified = True
 
     def redo(self):
         """执行重做"""
@@ -39,7 +39,7 @@ class TextEditor:
             cmd = self._redo_stack.pop()
             if cmd.execute():
                 self._undo_stack.append(cmd)
-                self.is_modified = True
+                # self.is_modified = True
     # --- 辅助方法：处理显示范围 ---
     def get_lines_view(self, start: int = 1, end: int = -1):
         """获取指定范围的行（带行号），start从1开始"""
@@ -57,3 +57,29 @@ class TextEditor:
         for i in range(start_idx, end_idx):
             result.append(f"{i + 1}: {self.lines[i]}")
         return result
+    
+"""装饰器基类，保持与 TextEditor 相同接口"""
+class EditorDecorator:
+    def __init__(self, editor: TextEditor):
+        self._editor = editor
+
+    # 代理属性访问
+    def __getattr__(self, name):
+        return getattr(self._editor, name)
+        
+class AutoModifiedDecorator(EditorDecorator):
+    """在执行任何命令后自动标记文件为已修改"""
+
+    def execute_command(self, command) -> bool:
+        result = self._editor.execute_command(command)
+        if result:
+            self._editor.is_modified = True
+        return result
+
+    def undo(self):
+        self._editor.undo()
+        self._editor.is_modified = True
+
+    def redo(self):
+        self._editor.redo()
+        self._editor.is_modified = True

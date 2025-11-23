@@ -2,7 +2,7 @@ import os
 import json
 from typing import Dict, Optional
 from .interfaces import Subject
-from .editor import TextEditor
+from .editor import TextEditor, AutoModifiedDecorator
 from .logger import Logger # 需要引入 Logger 类型做类型提示(可选)
 from pathlib import Path
 
@@ -46,6 +46,7 @@ class Workspace(Subject):
             print(f"New file created: {filename}")
             
         editor = TextEditor(filename, content)
+        editor = AutoModifiedDecorator(editor)
         self.editors[filename] = editor
         self.active_editor_name = filename
         
@@ -65,6 +66,7 @@ class Workspace(Subject):
             return
         content = ["# log"] if with_log else []
         editor = TextEditor(filename, content)
+        editor = AutoModifiedDecorator(editor)
         editor.is_modified = True 
         self.editors[filename] = editor
         self.active_editor_name = filename
