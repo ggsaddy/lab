@@ -64,12 +64,12 @@ def print_file_helper():
 Available commands:
 
   Workspace:
-    load <file>                         - Load file into workspace
+    load <file>                         - Load file into workspace (.txt/.xml)
     save [file|all]                     - Save current file or all files
-    init <file> [with-log]              - Create new buffer (optional: enable log)
+    init <file> [with-log]              - Create new buffer (type by extension)
     close [file]                        - Close current or specified file
     edit <file>                         - Switch active file
-    editor-list                         - List all loaded files
+    editor-list                         - List all loaded files (show duration)
     dir-tree [path]                     - Display directory tree
     undo                                - Undo last action
     redo                                - Redo last undone action
@@ -81,6 +81,14 @@ Available commands:
     delete <line:col> <len>             - Delete characters starting from position
     replace <line:col> <len> "text"     - Replace characters with provided text
     show [start:end]                    - Show full or partial file content
+
+  XML Editing (only for .xml files):
+    xml-tree                            - Show XML tree
+    insert-before <tag> <newId> <targetId> ["text"]
+    append-child   <tag> <newId> <parentId> ["text"]
+    edit-id        <oldId> <newId>
+    edit-text      <elementId> ["text"]
+    delete         <elementId>
 
   Logging:
     log-on [file]                       - Enable logging (optionally for specific file)
