@@ -104,8 +104,8 @@ def run_lab2_xml_editor():
     xe.execute_command(EditTextCommand(xe, "title1", "Itallian by Rowlling"))
     # xml-tree
     print("-- xml-tree --")
-    for line in xe.xml_tree_lines():
-        print(line)
+    if hasattr(xe, 'print_tree'):
+        xe.print_tree()
     # basic structure check
     assert_eq("has root", xe.root.tag, "root")
     assert_eq("has title1 text", xe.id_index["title1"].text, "Itallian by Rowlling")

@@ -249,9 +249,8 @@ def main():
                         print(f"{i+1}: {lines[i]}")
 
                 elif cmd == "xml-tree":
-                    if hasattr(editor, 'xml_tree_lines'):
-                        for line in editor.xml_tree_lines():
-                            print(line)
+                    if hasattr(editor, 'print_tree'):
+                        editor.print_tree()
                     else:
                         print("Error: xml-tree only applies to .xml files")
                 elif cmd == "insert-before":

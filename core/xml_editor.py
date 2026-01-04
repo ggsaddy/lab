@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict
 import xml.etree.ElementTree as ET
+from core.tree_view import ConsoleTreeView, XmlTreeDataProvider
 
 class XmlEditor:
     def __init__(self, filename: str, xml_text: Optional[str] = None, log_config_line: Optional[str] = None):
@@ -67,28 +68,7 @@ class XmlEditor:
         walk(self.root)
         return parent
 
-    def xml_tree_lines(self) -> List[str]:
-        lines: List[str] = []
-        def attrs_str(e: ET.Element) -> str:
-            parts = []
-            for k, v in e.attrib.items():
-                parts.append(f"{k}=\"{v}\"")
-            if parts:
-                return " [" + ", ".join(parts) + "]"
-            return ""
-        def walk_children(e: ET.Element, prefix: str):
-            children = list(e)
-            n = len(children)
-            for i, c in enumerate(children):
-                is_last = i == n - 1
-                conn = "└── " if is_last else "├── "
-                lines.append(prefix + conn + c.tag + attrs_str(c))
-                ext = "    " if is_last else "│   "
-                if c.text and c.text.strip():
-                    lines.append(prefix + ext + "└── " + "\"" + c.text.strip() + "\"")
-                walk_children(c, prefix + ext)
-        lines.append(self.root.tag + attrs_str(self.root))
-        if self.root.text and self.root.text.strip():
-            lines.append("└── " + "\"" + self.root.text.strip() + "\"")
-        walk_children(self.root, "")
-        return lines
+    def print_tree(self):
+        provider = XmlTreeDataProvider(self.root)
+        view = ConsoleTreeView(provider)
+        view.show()
