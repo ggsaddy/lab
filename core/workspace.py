@@ -1,16 +1,17 @@
 import os
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from .interfaces import Subject
 from .editor import TextEditor, AutoModifiedDecorator
 from .memento import WorkspaceMemento, WorkspaceCaretaker
 from .logger import Logger # 需要引入 Logger 类型做类型提示(可选)
 from pathlib import Path
+from .xml_editor import XmlEditor
 
 class Workspace(Subject):
     def __init__(self):
         super().__init__()
-        self.editors: Dict[str, TextEditor] = {}
+        self.editors: Dict[str, Union[TextEditor, XmlEditor]] = {}
         self.active_editor_name: Optional[str] = None
         self.caretaker = WorkspaceCaretaker()
         # Logger 会在 main 中 attach，但为了获取 logger 状态，我们最好能反向访问，
@@ -22,60 +23,105 @@ class Workspace(Subject):
     # 为了节省篇幅，这里只列出修改过或新增的方法，其余请保留原样
     
     @property
-    def active_editor(self) -> Optional[TextEditor]:
+    def active_editor(self) -> Optional[Union[TextEditor, XmlEditor]]:
         if self.active_editor_name and self.active_editor_name in self.editors:
             return self.editors[self.active_editor_name]
         return None
 
     def load_file(self, filename: str):
-        # (保持原样)
         if filename in self.editors:
             self.switch_editor(filename)
             return
-        content = []
-        if os.path.exists(filename):
-            try:
-                with open(filename, 'r', encoding='utf-8') as f:
-                    content = [line.rstrip('\n') for line in f.readlines()]
-            except IOError as e:
-                print(f"Error loading file: {e}")
-                return
+        suffix = Path(filename).suffix
+        if suffix == ".txt":
+            content = []
+            if os.path.exists(filename):
+                try:
+                    with open(filename, 'r', encoding='utf-8') as f:
+                        content = [line.rstrip('\n') for line in f.readlines()]
+                except IOError as e:
+                    print(f"Error loading file: {e}")
+                    return
+            else:
+                print(f"New file created: {filename}")
+            editor = TextEditor(filename, content)
+            editor = AutoModifiedDecorator(editor)
+            self.editors[filename] = editor
+            if self.active_editor_name:
+                self.notify("active_stop", {"filename": self.active_editor_name})
+            self.active_editor_name = filename
+            if content and content[0].strip().startswith('# log'):
+                self.notify("auto_log_enable", {"filename": filename, "log_config": content[0].strip()})
+            self.notify("active_start", {"filename": filename})
+            self.notify("command", {"filename": filename, "command_str": f"load {filename}"})
+            print(f"Loaded {filename}")
+        elif suffix == ".xml":
+            xml_text = None
+            first_line = None
+            if os.path.exists(filename):
+                try:
+                    with open(filename, 'r', encoding='utf-8') as f:
+                        raw = f.read()
+                        lines = raw.splitlines()
+                        if lines and lines[0].strip().startswith('# log'):
+                            first_line = lines[0].strip()
+                            xml_text = "\n".join(lines[1:])
+                        else:
+                            xml_text = raw
+                except IOError as e:
+                    print(f"Error loading file: {e}")
+                    return
+            else:
+                xml_text = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root id=\"root\"></root>"
+                print(f"New file created: {filename}")
+            editor = XmlEditor(filename, xml_text=xml_text, log_config_line=first_line)
+            self.editors[filename] = editor
+            if self.active_editor_name:
+                self.notify("active_stop", {"filename": self.active_editor_name})
+            self.active_editor_name = filename
+            if first_line and first_line.startswith('# log'):
+                self.notify("auto_log_enable", {"filename": filename, "log_config": first_line})
+            self.notify("active_start", {"filename": filename})
+            self.notify("command", {"filename": filename, "command_str": f"load {filename}"})
+            print(f"Loaded {filename}")
         else:
-            if Path(filename).suffix != '.txt':
-                print(f"Warning: {filename} is not a .txt file.Please check the file format.")
-                return 
-
-            print(f"New file created: {filename}")
-            
-        editor = TextEditor(filename, content)
-        editor = AutoModifiedDecorator(editor)
-        self.editors[filename] = editor
-        self.active_editor_name = filename
-        
-        if content and content[0].strip() == "# log":
-            self.notify("auto_log_enable", {"filename": filename})
-
-        self.notify("command", {"filename": filename, "command_str": f"load {filename}"})
-        print(f"Loaded {filename}")
+            print(f"Warning: unsupported file type: {suffix}")
 
     def init_file(self, filename: str, with_log: bool = False):
-        # (保持原样)
         if filename in self.editors:
             print(f"Error: {filename} is already open.")
             return
-        if Path(filename).suffix != '.txt':
-            print(f"Warning: {filename} is not a .txt file.Please check the file format.")
-            return
-        content = ["# log"] if with_log else []
-        editor = TextEditor(filename, content)
-        editor = AutoModifiedDecorator(editor)
-        editor.is_modified = True 
-        self.editors[filename] = editor
-        self.active_editor_name = filename
-        if with_log:
-            self.notify("auto_log_enable", {"filename": filename})
-        self.notify("command", {"filename": filename, "command_str": f"init {filename}"})
-        print(f"Initialized {filename}")
+        suffix = Path(filename).suffix
+        if suffix == '.txt':
+            content = ["# log"] if with_log else []
+            editor = TextEditor(filename, content)
+            editor = AutoModifiedDecorator(editor)
+            editor.is_modified = True 
+            self.editors[filename] = editor
+            if self.active_editor_name:
+                self.notify("active_stop", {"filename": self.active_editor_name})
+            self.active_editor_name = filename
+            if with_log:
+                self.notify("auto_log_enable", {"filename": filename, "log_config": "# log"})
+            self.notify("active_start", {"filename": filename})
+            self.notify("command", {"filename": filename, "command_str": f"init {filename}"})
+            print(f"Initialized {filename}")
+        elif suffix == '.xml':
+            first_line = "# log" if with_log else None
+            xml_text = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root id=\"root\"></root>"
+            editor = XmlEditor(filename, xml_text=xml_text, log_config_line=first_line)
+            editor.is_modified = True
+            self.editors[filename] = editor
+            if self.active_editor_name:
+                self.notify("active_stop", {"filename": self.active_editor_name})
+            self.active_editor_name = filename
+            if with_log:
+                self.notify("auto_log_enable", {"filename": filename, "log_config": first_line})
+            self.notify("active_start", {"filename": filename})
+            self.notify("command", {"filename": filename, "command_str": f"init {filename}"})
+            print(f"Initialized {filename}")
+        else:
+            print(f"Warning: unsupported file type: {suffix}")
 
     def save_file(self, filename: str = None):
         # (保持原样)
@@ -102,22 +148,29 @@ class Workspace(Subject):
             print(f"Error saving {filename}: {e}")
 
     def switch_editor(self, filename: str):
-        # (保持原样)
         if filename in self.editors:
+            if self.active_editor_name and self.active_editor_name != filename:
+                self.notify("active_stop", {"filename": self.active_editor_name})
             self.active_editor_name = filename
+            self.notify("active_start", {"filename": filename})
             print(f"Switched to {filename}")
         else:
             print(f"Error: File {filename} not open.")
     
     def list_editors(self):
-        # (保持原样)
         if not self.editors:
             print("No files open.")
             return
+        stat = None
+        for obs in self._observers:
+            if hasattr(obs, 'get_duration_str'):
+                stat = obs
+                break
         for name, editor in self.editors.items():
             prefix = ">" if name == self.active_editor_name else " "
             status = "*" if editor.is_modified else ""
-            print(f"{prefix} {name}{status}")
+            duration = f" ({stat.get_duration_str(name)})" if stat else ""
+            print(f"{prefix} {name}{status}{duration}")
 
     # === 以下是重点修改的部分 ===
 
@@ -133,7 +186,10 @@ class Workspace(Subject):
         editor = self.editors[target]
         
         if editor.is_modified:
-            choice = input(f"File '{target}' has unsaved changes. Save? (y/n): ").strip().lower()
+            try:
+                choice = input(f"File '{target}' has unsaved changes. Save? (y/n): ").strip().lower()
+            except EOFError:
+                choice = 'n'
             if choice == 'y':
                 self._write_to_disk(target)
             else:
@@ -163,7 +219,10 @@ class Workspace(Subject):
         for filename in open_files:
             editor = self.editors[filename]
             if editor.is_modified:
-                choice = input(f"File '{filename}' has unsaved changes. Save? (y/n): ").strip().lower()
+                try:
+                    choice = input(f"File '{filename}' has unsaved changes. Save? (y/n): ").strip().lower()
+                except EOFError:
+                    choice = 'n'
                 if choice == 'y':
                     self._write_to_disk(filename)
                 else:
