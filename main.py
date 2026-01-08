@@ -12,7 +12,7 @@ from core.xml_commands import (
     EditTextCommand,
     DeleteElementCommand,
 )
-from utils.file_helper import print_dir_tree, print_file_helper
+from utils.file_helper import print_dir_tree, print_file_helper, print_xml_tree
 from core.spellcheck import SimpleSpellChecker, LanguageToolHTTPSpellChecker
 
 def main():
@@ -249,8 +249,8 @@ def main():
                         print(f"{i+1}: {lines[i]}")
 
                 elif cmd == "xml-tree":
-                    if hasattr(editor, 'print_tree'):
-                        editor.print_tree()
+                    if hasattr(editor, 'root'):
+                        print_xml_tree(editor.root)
                     else:
                         print("Error: xml-tree only applies to .xml files")
                 elif cmd == "insert-before":

@@ -1,6 +1,5 @@
 from typing import List, Optional, Dict
 import xml.etree.ElementTree as ET
-from core.tree_view import ConsoleTreeView, XmlTreeDataProvider
 
 class XmlEditor:
     def __init__(self, filename: str, xml_text: Optional[str] = None, log_config_line: Optional[str] = None):
@@ -67,8 +66,3 @@ class XmlEditor:
             return False
         walk(self.root)
         return parent
-
-    def print_tree(self):
-        provider = XmlTreeDataProvider(self.root)
-        view = ConsoleTreeView(provider)
-        view.show()

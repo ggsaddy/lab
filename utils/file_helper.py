@@ -1,5 +1,6 @@
 import os
-from core.tree_view import ConsoleTreeView, FileSystemTreeDataProvider
+import xml.etree.ElementTree as ET
+from core.tree_view import ConsoleTreeView, FileSystemTreeDataProvider, XmlTreeDataProvider
 
 def print_dir_tree(startpath: str):
     """
@@ -9,6 +10,15 @@ def print_dir_tree(startpath: str):
     provider = FileSystemTreeDataProvider(startpath)
     view = ConsoleTreeView(provider)
     view.show()
+
+def print_xml_tree(root_element: ET.Element):
+    """
+    打印 XML 树结构
+    """
+    provider = XmlTreeDataProvider(root_element)
+    view = ConsoleTreeView(provider)
+    view.show()
+
 
 def print_file_helper():
     """
