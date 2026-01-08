@@ -40,19 +40,7 @@ class ConsoleTreeView:
         roots = self.provider.get_children(None)
         if not roots:
             return
-        
-        # Special handling for single root to match typical tree output (root at top)
-        # But the recursive logic handles it fine.
-        for i, root in enumerate(roots):
-            # For the very top level roots, we usually print them without indentation lines if it's just one root
-            # But to be consistent with typical `tree` command, the root is printed as top line.
-            # Let's check how `print_dir_tree` did it:
-            # print(f"{os.path.basename(os.path.abspath(startpath))}/")
-            # Then children.
-            
-            # If we treat the "startpath" as the root element, get_children(None) returns [startpath].
-            # We print startpath. Then we recurse on startpath's children.
-            
+        for i, root in enumerate(roots):   
             self._print_node(root, "", is_last=(i == len(roots) - 1), is_root=True)
 
     def _print_node(self, element: Any, prefix: str, is_last: bool, is_root: bool = False):
